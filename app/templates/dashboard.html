@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block content %}
+<div class="row mb-3 text-center">
+<div class="col"><div class="card p-3"><h3>{{ data|length }}</h3>Students</div></div>
+<div class="col"><div class="card p-3"><h3>{{ "%.1f"|format(avg) }}%</h3>Average</div></div>
+<div class="col"><div class="card p-3 {{ 'border-danger text-danger' if n_risk }}"><h3>{{ n_risk }}</h3>Need support</div></div></div>
+<form class="mb-3"><select name="class_name" class="form-select w-auto d-inline" onchange="this.form.submit()">
+<option value="">All classes</option>{% for c in classes %}<option {{ 'selected' if c==cls }}>{{ c }}</option>{% endfor %}</select></form>
+<table class="table table-bordered bg-white"><tr><th>Roll</th><th>Name</th><th>Class</th><th>Overall</th><th>Grade</th><th>Status</th><th></th></tr>
+{% for d in data %}<tr class="{{ 'table-danger' if d.at_risk }}"><td>{{ d.student.roll }}</td><td>{{ d.student.name }}</td>
+<td>{{ d.student.class_name }}</td><td>{{ "%.1f"|format(d.overall) }}%</td><td>{{ d.grade }}</td>
+<td>{{ 'Needs support' if d.at_risk else 'OK' }}</td><td><a href="/report/{{ d.student.id }}">Report</a></td></tr>{% endfor %}</table>
+{% endblock %}

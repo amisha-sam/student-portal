@@ -1,0 +1,23 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: portal
+      POSTGRES_USER: portal
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-portal_dev_pw}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portal -d portal"]
+      interval: 5s
+      retries: 10
+  app:
+    build: { context: .., dockerfile: docker/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+psycopg2://portal:${DB_PASSWORD:-portal_dev_pw}@db:5432/portal
+      SECRET_KEY: ${SECRET_KEY:-dev-change-me}
+      AT_RISK_SUBJECT: 40
+      AT_RISK_OVERALL: 50
+    ports: ["8000:8000"]
+    depends_on: { db: { condition: service_healthy } }
+volumes:
+  pgdata:

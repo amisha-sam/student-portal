@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% block content %}
+<h4>{{ d.student.name }} <small class="text-muted">{{ d.student.roll }} · {{ d.student.class_name }}</small></h4>
+<table class="table bg-white w-auto"><tr><th>Subject</th><th>Average</th><th>Grade</th></tr>
+{% for n, v in d.subjects.items() %}<tr class="{{ 'table-danger' if v < 40 }}"><td>{{ n }}</td><td>{{ "%.1f"|format(v) }}%</td><td>{{ grade(v) }}</td></tr>{% endfor %}
+<tr class="fw-bold"><td>Overall</td><td>{{ "%.1f"|format(d.overall) }}%</td><td>{{ d.grade }}</td></tr></table>
+{% if d.at_risk %}<div class="alert alert-danger"><b>Needs support:</b><br>{% for r in d.reasons %}{{ r }}<br>{% endfor %}</div>{% endif %}
+<a class="btn btn-outline-primary" href="/report/{{ d.student.id }}.pdf">Download PDF</a>{% endblock %}

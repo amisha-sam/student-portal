@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block content %}
+<h4>Marks entry</h4>
+<form class="row g-2 mb-3">
+<div class="col-auto"><select name="class_name" class="form-select" required><option value="">Class</option>
+{% for c in classes %}<option {{ 'selected' if c==cls }}>{{ c }}</option>{% endfor %}</select></div>
+<div class="col-auto"><select name="subject_id" class="form-select" required><option value="">Subject</option>
+{% for s in subjects %}<option value="{{ s.id }}" {{ 'selected' if s.id==sid }}>{{ s.name }}</option>{% endfor %}</select></div>
+<div class="col-auto"><input name="exam" class="form-control" placeholder="Exam (e.g. Midterm)" value="{{ exam }}" required></div>
+<div class="col-auto"><button class="btn btn-secondary">Load students</button></div></form>
+{% if students and sid and exam %}
+<form method="post"><input type="hidden" name="class_name" value="{{ cls }}"><input type="hidden" name="subject_id" value="{{ sid }}">
+<input type="hidden" name="exam" value="{{ exam }}">
+<table class="table bg-white w-auto"><tr><th>Roll</th><th>Name</th><th>Marks (0-100)</th></tr>
+{% for s in students %}<tr><td>{{ s.roll }}</td><td>{{ s.name }}</td>
+<td><input type="number" step="0.5" min="0" max="100" name="score_{{ s.id }}" value="{{ existing.get(s.id, '') }}" class="form-control"></td></tr>{% endfor %}
+</table><button class="btn btn-primary">Save marks</button></form>{% endif %}{% endblock %}
