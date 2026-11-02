@@ -38,7 +38,7 @@ jobs:
         run: tflint --init
 
       - name: Run TFLint
-        run: tflint --chdir=terraform/envs/dev --recursive
+        run: tflint --recursive
 
       - name: Validate Terraform Dev Configuration
         run: |
