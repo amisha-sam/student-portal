@@ -1,9 +1,3 @@
-variable "repository_name" {
-  description = "Name of the ECR repository"
-  type        = string
-  default     = "student-portal-app"
-}
-
 variable "project_name" {
   description = "Project name tag and prefix"
   type        = string

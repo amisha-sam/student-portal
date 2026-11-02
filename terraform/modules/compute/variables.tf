@@ -45,9 +45,3 @@ variable "enable_alb" {
   type        = bool
   default     = true
 }
-
-variable "app_port" {
-  description = "Application port"
-  type        = number
-  default     = 8000
-}
