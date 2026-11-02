@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}500 Server Error &bull; Student Performance Portal{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center text-center my-5">
+  <div class="col-md-6">
+    <div class="p-4 bg-white rounded-4 shadow-sm border">
+      <div class="text-warning display-1 fw-bold mb-2">500</div>
+      <h3 class="fw-bold text-dark mb-2">Internal Server Error</h3>
+      <p class="text-muted mb-4">Something went wrong while processing your request. The error has been logged for system administrators.</p>
+      <a href="/" class="btn btn-primary px-4">
+        <i class="bi bi-house-door me-1"></i> Return Home
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

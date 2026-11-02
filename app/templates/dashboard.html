@@ -1,12 +1,287 @@
-{% extends "base.html" %}{% block content %}
-<div class="row mb-3 text-center">
-<div class="col"><div class="card p-3"><h3>{{ data|length }}</h3>Students</div></div>
-<div class="col"><div class="card p-3"><h3>{{ "%.1f"|format(avg) }}%</h3>Average</div></div>
-<div class="col"><div class="card p-3 {{ 'border-danger text-danger' if n_risk }}"><h3>{{ n_risk }}</h3>Need support</div></div></div>
-<form class="mb-3"><select name="class_name" class="form-select w-auto d-inline" onchange="this.form.submit()">
-<option value="">All classes</option>{% for c in classes %}<option {{ 'selected' if c==cls }}>{{ c }}</option>{% endfor %}</select></form>
-<table class="table table-bordered bg-white"><tr><th>Roll</th><th>Name</th><th>Class</th><th>Overall</th><th>Grade</th><th>Status</th><th></th></tr>
-{% for d in data %}<tr class="{{ 'table-danger' if d.at_risk }}"><td>{{ d.student.roll }}</td><td>{{ d.student.name }}</td>
-<td>{{ d.student.class_name }}</td><td>{{ "%.1f"|format(d.overall) }}%</td><td>{{ d.grade }}</td>
-<td>{{ 'Needs support' if d.at_risk else 'OK' }}</td><td><a href="/report/{{ d.student.id }}">Report</a></td></tr>{% endfor %}</table>
+{% extends "base.html" %}
+{% block title %}Dashboard &bull; Student Performance Portal{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <h2 class="h3 fw-bold mb-1">Academic Performance Dashboard</h2>
+    <p class="text-muted small mb-0">Overview of student cohort, grades distribution, and academic support alerts.</p>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 small fw-semibold text-muted">Class:</label>
+      <select name="class_name" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+        <option value="">All Classes</option>
+        {% for c in classes %}
+        <option value="{{ c }}" {% if c == cls %}selected{% endif %}>Class {{ c }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <a href="/export.csv{% if cls %}?class_name={{ cls }}{% endif %}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-download me-1"></i> Export CSV
+    </a>
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row g-3 mb-4">
+  <div class="col-md-4">
+    <div class="card stat-card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small fw-semibold text-uppercase">Cohort Size</div>
+          <div class="display-6 fw-bold text-dark mt-1">{{ total_students }}</div>
+          <div class="small text-muted mt-1"><i class="bi bi-people me-1"></i> Active students evaluated</div>
+        </div>
+        <div class="p-3 bg-primary-subtle text-primary rounded-circle">
+          <i class="bi bi-mortarboard-fill fs-3"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card stat-card p-3 h-100">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-muted small fw-semibold text-uppercase">Cohort Average</div>
+          <div class="display-6 fw-bold text-dark mt-1">{{ "%.1f"|format(avg) }}%</div>
+          <div class="small text-muted mt-1">
+            <span class="badge bg-info-subtle text-info border">Across all subjects</span>
+          </div>
+        </div>
+        <div class="p-3 bg-info-subtle text-info rounded-circle">
+          <i class="bi bi-graph-up-arrow fs-3"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-4">
+    <div class="card stat-card risk p-3 h-100 {% if n_risk > 0 %}at-risk-pulse{% endif %}">
+      <div class="d-flex justify-content-between align-items-center">
+        <div>
+          <div class="text-danger small fw-semibold text-uppercase">Needs Support</div>
+          <div class="display-6 fw-bold text-danger mt-1">{{ n_risk }}</div>
+          <div class="small text-muted mt-1">
+            <a href="/at-risk{% if cls %}?class_name={{ cls }}{% endif %}" class="text-danger fw-semibold text-decoration-none">
+              View flagged students <i class="bi bi-arrow-right"></i>
+            </a>
+          </div>
+        </div>
+        <div class="p-3 bg-danger-subtle text-danger rounded-circle">
+          <i class="bi bi-exclamation-triangle-fill fs-3"></i>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row g-3 mb-4">
+  <div class="col-lg-4 col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-pie-chart-fill text-primary"></i> Grade Distribution
+      </h6>
+      <div style="position: relative; height: 220px;">
+        <canvas id="gradeChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4 col-md-6">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-bar-chart-line-fill text-success"></i> Subject Averages (%)
+      </h6>
+      <div style="position: relative; height: 220px;">
+        <canvas id="subjectChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4 col-md-12">
+    <div class="card p-3 h-100">
+      <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
+        <i class="bi bi-diagram-3-fill text-warning"></i> Class Support Breakdown
+      </h6>
+      <div style="position: relative; height: 220px;">
+        <canvas id="classChart"></canvas>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Student Table -->
+<div class="card overflow-hidden">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0 fw-bold">Student Roster</h5>
+    <span class="badge bg-secondary-subtle text-secondary">{{ data|length }} Students Shown</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Roll No</th>
+          <th>Student Name</th>
+          <th>Class</th>
+          <th>Overall Average</th>
+          <th>Grade</th>
+          <th>Status</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in data %}
+        <tr class="{% if d.at_risk %}table-risk-row{% endif %}">
+          <td class="fw-semibold"><code>{{ d.student.roll }}</code></td>
+          <td>
+            <span class="fw-medium text-dark">{{ d.student.name }}</span>
+          </td>
+          <td><span class="badge bg-light text-dark border">{{ d.student.class_name }}</span></td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="progress flex-grow-1" style="height: 6px; width: 80px;">
+                <div class="progress-bar {% if d.at_risk %}bg-danger{% elif d.overall >= 80 %}bg-success{% else %}bg-primary{% endif %}"
+                     role="progressbar" style="width: {{ d.overall }}%"></div>
+              </div>
+              <span class="small fw-semibold">{{ "%.1f"|format(d.overall) }}%</span>
+            </div>
+          </td>
+          <td>
+            <span class="badge {% if d.grade in ('A+', 'A') %}bg-success{% elif d.grade == 'B' %}bg-primary{% elif d.grade == 'C' %}bg-info text-dark{% elif d.grade == 'D' %}bg-warning text-dark{% else %}bg-danger{% endif %} px-2 py-1">
+              {{ d.grade }}
+            </span>
+          </td>
+          <td>
+            {% if d.at_risk %}
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle d-inline-flex align-items-center gap-1"
+                  data-bs-toggle="tooltip" title="{{ d.reasons|join(', ') }}">
+              <i class="bi bi-exclamation-circle-fill"></i> Needs Support
+            </span>
+            {% else %}
+            <span class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1">
+              <i class="bi bi-check-circle-fill"></i> Good Standing
+            </span>
+            {% endif %}
+          </td>
+          <td class="text-end">
+            <a href="/report/{{ d.student.id }}" class="btn btn-sm btn-outline-primary py-0 px-2">
+              <i class="bi bi-file-text me-1"></i> Report
+            </a>
+            <a href="/report/{{ d.student.id }}.pdf" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Download PDF">
+              <i class="bi bi-file-earmark-pdf"></i>
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center py-4 text-muted">
+            <i class="bi bi-info-circle me-1"></i> No students found for this class filter.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Enable Bootstrap tooltips
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.map(function (el) { return new bootstrap.Tooltip(el); });
+
+  // Fetch chart data from REST API
+  const classFilter = "{{ cls }}";
+  const apiUrl = "/api/charts" + (classFilter ? "?class_name=" + encodeURIComponent(classFilter) : "");
+
+  fetch(apiUrl)
+    .then(r => r.json())
+    .then(data => {
+      // 1. Grade distribution Doughnut chart
+      new Chart(document.getElementById("gradeChart"), {
+        type: "doughnut",
+        data: {
+          labels: data.grades.labels,
+          datasets: [{
+            data: data.grades.counts,
+            backgroundColor: ["#10b981", "#3b82f6", "#6366f1", "#06b6d4", "#f59e0b", "#ef4444"],
+            borderWidth: 1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "right", labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+
+      // 2. Subject Averages Bar chart
+      new Chart(document.getElementById("subjectChart"), {
+        type: "bar",
+        data: {
+          labels: data.subjects.labels,
+          datasets: [{
+            label: "Avg Score %",
+            data: data.subjects.averages,
+            backgroundColor: "#3b82f6",
+            borderRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { min: 0, max: 100, ticks: { stepSize: 20 } }
+          },
+          plugins: {
+            legend: { display: false }
+          }
+        }
+      });
+
+      // 3. Class-by-Class At-Risk vs Safe Stacked Bar
+      const classLabels = data.classes.map(c => "Class " + c.class_name);
+      const safeCounts = data.classes.map(c => c.safe);
+      const riskCounts = data.classes.map(c => c.at_risk);
+
+      new Chart(document.getElementById("classChart"), {
+        type: "bar",
+        data: {
+          labels: classLabels,
+          datasets: [
+            {
+              label: "Good Standing",
+              data: safeCounts,
+              backgroundColor: "#10b981",
+              borderRadius: 4
+            },
+            {
+              label: "Needs Support",
+              data: riskCounts,
+              backgroundColor: "#ef4444",
+              borderRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            x: { stacked: true },
+            y: { stacked: true, beginAtZero: true, ticks: { stepSize: 1 } }
+          },
+          plugins: {
+            legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } }
+          }
+        }
+      });
+    })
+    .catch(err => console.error("Error loading dashboard charts:", err));
+</script>
 {% endblock %}
