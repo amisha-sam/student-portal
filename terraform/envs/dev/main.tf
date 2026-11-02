@@ -40,7 +40,6 @@ module "iam" {
   project_name       = var.project_name
   environment        = var.environment
   ecr_repository_arn = module.ecr.repository_arn
-  enable_github_oidc = false # SCP explicit deny on OIDC provider
 }
 
 # 5. Database: Encrypted PostgreSQL 16 on db.t4g.micro in private subnets
@@ -81,5 +80,4 @@ module "compute" {
   instance_type         = var.instance_type
   enable_alb            = var.enable_alb
   target_group_arn      = module.alb.target_group_arn
-  app_port              = var.app_port
 }
