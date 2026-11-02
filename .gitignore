@@ -4,9 +4,10 @@ __pycache__/
 *.db
 instance/
 .pytest_cache/
+.venv/
+venv/
 .terraform/
 *.tfstate*
 *.tfvars
 !example.tfvars
-.venv/
-.DS_Store
+*.binary

@@ -1,0 +1,17 @@
+---
+- name: Configure and Deploy Student Marks Portal Host
+  hosts: app_hosts
+  become: true
+  gather_facts: true
+
+  vars:
+    ecr_repository_url: "{{ ecr_repo_url | default('') }}"
+    aws_region: "ap-southeast-2"
+
+  roles:
+    - swap
+    - docker
+    - node_exporter
+    - prometheus
+    - grafana
+    - app

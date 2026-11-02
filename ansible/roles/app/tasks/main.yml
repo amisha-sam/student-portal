@@ -1,0 +1,80 @@
+---
+- name: Ensure app directory exists
+  file:
+    path: /opt/student-portal
+    state: directory
+    owner: ec2-user
+    group: ec2-user
+    mode: '0755'
+
+- name: Retrieve Database URL from AWS SSM Parameter Store
+  command: >
+    aws ssm get-parameter
+    --name "/student-portal/dev/database_url"
+    --with-decryption
+    --query "Parameter.Value"
+    --output text
+    --region ap-southeast-2
+  register: ssm_db_url
+  changed_when: false
+  no_log: true
+
+- name: Write application environment file
+  copy:
+    dest: /opt/student-portal/app.env
+    owner: ec2-user
+    group: ec2-user
+    mode: '0600'
+    content: |
+      DATABASE_URL={{ ssm_db_url.stdout }}
+      SECRET_KEY=student-portal-secure-production-key-2026
+      AT_RISK_SUBJECT=40
+      AT_RISK_OVERALL=50
+  register: app_env
+  no_log: true
+
+- name: Login to Amazon ECR
+  shell: >
+    aws ecr get-login-password --region ap-southeast-2 |
+    docker login --username AWS --password-stdin {{ ecr_repository_url }}
+  changed_when: false
+
+- name: Pull latest student portal image from ECR
+  command: docker pull {{ ecr_repository_url }}:latest
+  register: pull_app
+  changed_when: "'Downloaded newer image' in pull_app.stdout"
+
+- name: Check if student-portal-app container is running
+  command: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' student-portal-app
+  register: app_running
+  failed_when: false
+  changed_when: false
+
+- name: Remove stale student-portal-app container if environment or image changed
+  command: docker rm -f student-portal-app
+  when: app_running.stdout != 'true' or pull_app.changed or app_env.changed
+  failed_when: false
+
+- name: Run student-portal-app container
+  command: >
+    docker run -d
+    --name student-portal-app
+    --restart unless-stopped
+    --network student-portal-net
+    -p 8000:8000
+    --env-file /opt/student-portal/app.env
+    {{ ecr_repository_url }}:latest
+  when: app_running.stdout != 'true' or pull_app.changed or app_env.changed
+
+- name: Wait for application health check to return OK
+  command: curl -s -f http://localhost:8000/health
+  register: result
+  until: result.rc == 0
+  retries: 20
+  delay: 3
+  changed_when: false
+
+- name: Seed database with initial demo users and academic records
+  command: docker exec student-portal-app flask --app app seed
+  register: seed_output
+  changed_when: "'Seeded' in seed_output.stdout"

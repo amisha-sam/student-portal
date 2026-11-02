@@ -1,17 +1,188 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Student Marks & Performance Portal</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"></head>
-<body class="bg-light">
-<nav class="navbar navbar-dark bg-primary mb-4"><div class="container">
-<a class="navbar-brand" href="/">Marks &amp; Performance Portal</a>
-{% if current_user.is_authenticated %}<div class="text-white">
-{% if current_user.role != 'student' %}<a class="text-white me-3" href="/marks">Enter Marks</a>
-<a class="text-white me-3" href="/at-risk">Needs Support</a>
-<a class="text-white me-3" href="/export.csv">Export CSV</a>{% endif %}
-{{ current_user.username }} ({{ current_user.role }}) · <a class="text-white" href="/logout">Logout</a></div>{% endif %}
-</div></nav>
-<div class="container">
-{% with msgs = get_flashed_messages(with_categories=true) %}{% for c, m in msgs %}
-<div class="alert alert-{{ c }}">{{ m }}</div>{% endfor %}{% endwith %}
-{% block content %}{% endblock %}</div></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Student Marks & Performance Portal{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --brand-primary: #1e3a8a;
+      --brand-dark: #0f172a;
+      --risk-red: #ef4444;
+      --risk-bg: #fef2f2;
+      --risk-border: #fecaca;
+      --safe-green: #10b981;
+    }
+    body {
+      font-family: var(--font-family);
+      background-color: #f8fafc;
+      color: #334155;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .navbar {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+    .card {
+      border: 1px solid #e2e8f0;
+      border-radius: 0.75rem;
+      box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+      transition: box-shadow 0.2s ease;
+    }
+    .card:hover {
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+    }
+    .stat-card {
+      border-left: 4px solid var(--brand-primary);
+    }
+    .stat-card.risk {
+      border-left-color: var(--risk-red);
+      background-color: var(--risk-bg);
+    }
+    .table-risk-row {
+      background-color: #fff1f2 !important;
+    }
+    .badge-role-admin { background-color: #7c3aed; }
+    .badge-role-teacher { background-color: #2563eb; }
+    .badge-role-student { background-color: #059669; }
+    .nav-link {
+      color: #cbd5e1 !important;
+      font-weight: 500;
+      transition: color 0.15s ease;
+    }
+    .nav-link:hover, .nav-link.active {
+      color: #ffffff !important;
+    }
+    .at-risk-pulse {
+      animation: pulse-ring 2s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+      70% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+    }
+    footer {
+      margin-top: auto;
+      border-top: 1px solid #e2e8f0;
+      background: #ffffff;
+      padding: 1.25rem 0;
+      color: #64748b;
+      font-size: 0.875rem;
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark py-2 mb-4">
+    <div class="container">
+      <a class="navbar-brand d-flex align-items-center gap-2 fw-bold" href="/">
+        <i class="bi bi-mortarboard-fill text-primary"></i>
+        <span>Student Portal</span>
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMenu">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <div class="collapse navbar-collapse" id="navMenu">
+        {% if current_user.is_authenticated %}
+        <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+          {% if current_user.role in ('admin', 'teacher') %}
+          <li class="nav-item">
+            <a class="nav-link" href="/"><i class="bi bi-speedometer2 me-1"></i> Dashboard</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/marks"><i class="bi bi-pencil-square me-1"></i> Enter Marks</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link text-warning fw-semibold" href="/at-risk">
+              <i class="bi bi-exclamation-triangle-fill text-danger me-1"></i> Needs Support
+            </a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/export.csv"><i class="bi bi-file-earmark-spreadsheet me-1"></i> Export CSV</a>
+          </li>
+          {% else %}
+          <li class="nav-item">
+            <a class="nav-link" href="/"><i class="bi bi-file-earmark-person me-1"></i> My Report</a>
+          </li>
+          {% endif %}
+        </ul>
+
+        <div class="d-flex align-items-center gap-3">
+          <div class="text-light small">
+            <span class="fw-semibold">{{ current_user.username }}</span>
+            <span class="badge ms-1 badge-role-{{ current_user.role }} text-uppercase" style="font-size: 0.7rem;">
+              {{ current_user.role }}
+            </span>
+          </div>
+          <a class="btn btn-outline-light btn-sm" href="/logout">
+            <i class="bi bi-box-arrow-right me-1"></i> Logout
+          </a>
+        </div>
+        {% else %}
+        <div class="navbar-nav ms-auto">
+          <a class="btn btn-primary btn-sm" href="/login">
+            <i class="bi bi-box-arrow-in-right me-1"></i> Sign In
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <main class="container mb-5">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="alert alert-{{ category if category != 'danger' else 'danger' }} alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
+            {% if category == 'success' %}
+              <i class="bi bi-check-circle-fill"></i>
+            {% elif category == 'danger' %}
+              <i class="bi bi-exclamation-octagon-fill"></i>
+            {% else %}
+              <i class="bi bi-info-circle-fill"></i>
+            {% endif %}
+            <div>{{ msg }}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer>
+    <div class="container d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <strong>Student Marks & Performance Portal</strong> &bull; AWS DevOps Capstone
+      </div>
+      <div class="d-flex align-items-center gap-3 small">
+        <a href="/health" class="text-decoration-none text-muted" target="_blank">
+          <span class="badge bg-success-subtle text-success border border-success-subtle">
+            <i class="bi bi-heart-pulse me-1"></i> Health
+          </span>
+        </a>
+        <a href="/metrics" class="text-decoration-none text-muted" target="_blank">
+          <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+            <i class="bi bi-graph-up me-1"></i> Prometheus Metrics
+          </span>
+        </a>
+        <span>Region: <code>ap-southeast-2</code></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

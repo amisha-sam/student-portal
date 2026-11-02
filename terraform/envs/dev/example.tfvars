@@ -1,0 +1,9 @@
+aws_region        = "ap-southeast-2"
+aws_profile       = "studentportalnew"
+project_name      = "student-portal"
+environment       = "dev"
+vpc_cidr          = "10.0.0.0/16"
+enable_alb        = true
+instance_type     = "t4g.micro"
+db_instance_class = "db.t4g.micro"
+app_port          = 8000

@@ -1,7 +1,108 @@
-{% extends "base.html" %}{% block content %}
-<h4 class="text-danger">Students who need extra support ({{ data|length }})</h4>
-<table class="table table-bordered bg-white"><tr><th>Roll</th><th>Name</th><th>Class</th><th>Overall</th><th>Why flagged</th></tr>
-{% for d in data %}<tr class="table-danger"><td>{{ d.student.roll }}</td><td><a href="/report/{{ d.student.id }}">{{ d.student.name }}</a></td>
-<td>{{ d.student.class_name }}</td><td>{{ "%.1f"|format(d.overall) }}% ({{ d.grade }})</td>
-<td>{% for r in d.reasons %}{{ r }}<br>{% endfor %}</td></tr>
-{% else %}<tr><td colspan="5">Nobody is below the threshold.</td></tr>{% endfor %}</table>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Needs Support &bull; Student Performance Portal{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+  <div>
+    <div class="d-flex align-items-center gap-2">
+      <span class="badge bg-danger p-2"><i class="bi bi-exclamation-triangle-fill fs-5"></i></span>
+      <div>
+        <h2 class="h3 fw-bold text-danger mb-0">Needs Support &bull; Early Intervention</h2>
+        <p class="text-muted small mb-0">Automated detection of students falling below academic performance benchmarks.</p>
+      </div>
+    </div>
+  </div>
+  <div class="d-flex align-items-center gap-2">
+    <form method="get" class="d-flex align-items-center gap-2">
+      <label class="form-label mb-0 small fw-semibold text-muted">Filter Class:</label>
+      <select name="class_name" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
+        <option value="">All Classes</option>
+        {% for c in classes %}
+        <option value="{{ c }}" {% if c == cls %}selected{% endif %}>Class {{ c }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <a href="/export.csv{% if cls %}?class_name={{ cls }}{% endif %}" class="btn btn-outline-danger btn-sm">
+      <i class="bi bi-file-earmark-spreadsheet me-1"></i> Export Support List
+    </a>
+  </div>
+</div>
+
+<!-- Rule explanation card -->
+<div class="alert alert-danger-subtle border border-danger-subtle d-flex align-items-start gap-3 p-3 mb-4 rounded-3">
+  <i class="bi bi-shield-exclamation text-danger fs-4 mt-1"></i>
+  <div>
+    <h6 class="fw-bold text-danger mb-1">Active At-Risk Detection Thresholds</h6>
+    <div class="small text-muted">
+      A student is automatically flagged if:
+      <ul class="mb-0 mt-1">
+        <li>Any subject average falls below <strong>40%</strong> (configurable via <code>AT_RISK_SUBJECT</code>)</li>
+        <li>Their cumulative overall average is below <strong>50%</strong> (configurable via <code>AT_RISK_OVERALL</code>)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="card overflow-hidden">
+  <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0 fw-bold text-danger d-flex align-items-center gap-2">
+      <i class="bi bi-flag-fill"></i> Flagged Students ({{ data|length }})
+    </h5>
+    <span class="small text-muted">Evaluated out of {{ total_evaluated }} students</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Roll No</th>
+          <th>Student Name</th>
+          <th>Class</th>
+          <th>Overall %</th>
+          <th>Grade</th>
+          <th>Identified Reasons for Flagging</th>
+          <th class="text-end">Intervention Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in data %}
+        <tr class="table-risk-row">
+          <td><code>{{ d.student.roll }}</code></td>
+          <td class="fw-bold text-dark">{{ d.student.name }}</td>
+          <td><span class="badge bg-light text-dark border">{{ d.student.class_name }}</span></td>
+          <td>
+            <span class="fw-bold text-danger">{{ "%.1f"|format(d.overall) }}%</span>
+          </td>
+          <td>
+            <span class="badge bg-danger px-2 py-1">{{ d.grade }}</span>
+          </td>
+          <td>
+            {% for r in d.reasons %}
+            <div class="d-flex align-items-center gap-1 text-danger small py-0.5">
+              <i class="bi bi-x-circle-fill"></i>
+              <span>{{ r }}</span>
+            </div>
+            {% endfor %}
+          </td>
+          <td class="text-end">
+            <a href="/report/{{ d.student.id }}" class="btn btn-sm btn-outline-primary py-1 px-2">
+              <i class="bi bi-eye me-1"></i> View Report
+            </a>
+            <a href="/report/{{ d.student.id }}.pdf" class="btn btn-sm btn-danger py-1 px-2">
+              <i class="bi bi-file-earmark-pdf me-1"></i> PDF Card
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center py-5 text-muted">
+            <i class="bi bi-check-circle-fill text-success fs-1 d-block mb-2"></i>
+            <h6 class="fw-bold text-success">All Clear!</h6>
+            <p class="small mb-0">No students in this cohort currently fall below the support thresholds.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

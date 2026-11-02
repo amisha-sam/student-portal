@@ -1,0 +1,38 @@
+groups:
+  - name: student_portal_alerts
+    rules:
+      - alert: AppDown
+        expr: up{job="student_portal_app"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Student Portal Application is DOWN"
+          description: "The student portal webapp container has stopped responding to health checks for > 30s."
+
+      - alert: High5xxErrorRate
+        expr: (sum(rate(http_requests_total{status=~"5.."}[5m])) / sum(rate(http_requests_total[5m]))) * 100 > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP 5xx Error Rate"
+          description: "Over 5% of web requests are failing with 5xx internal server errors."
+
+      - alert: HighCpuUsage
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Host CPU Usage Above 80%"
+          description: "EC2 app host CPU utilization has exceeded 80% for more than 5 minutes."
+
+      - alert: ElevatedAcademicRiskCohort
+        expr: (sum(students_at_risk) / sum(students_total)) * 100 > 40
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "Elevated Number of At-Risk Students"
+          description: "Over 40% of the active student cohort has been flagged as requiring academic support."

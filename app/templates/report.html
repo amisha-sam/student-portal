@@ -1,7 +1,138 @@
-{% extends "base.html" %}{% block content %}
-<h4>{{ d.student.name }} <small class="text-muted">{{ d.student.roll }} · {{ d.student.class_name }}</small></h4>
-<table class="table bg-white w-auto"><tr><th>Subject</th><th>Average</th><th>Grade</th></tr>
-{% for n, v in d.subjects.items() %}<tr class="{{ 'table-danger' if v < 40 }}"><td>{{ n }}</td><td>{{ "%.1f"|format(v) }}%</td><td>{{ grade(v) }}</td></tr>{% endfor %}
-<tr class="fw-bold"><td>Overall</td><td>{{ "%.1f"|format(d.overall) }}%</td><td>{{ d.grade }}</td></tr></table>
-{% if d.at_risk %}<div class="alert alert-danger"><b>Needs support:</b><br>{% for r in d.reasons %}{{ r }}<br>{% endfor %}</div>{% endif %}
-<a class="btn btn-outline-primary" href="/report/{{ d.student.id }}.pdf">Download PDF</a>{% endblock %}
+{% extends "base.html" %}
+{% block title %}Report Card &bull; {{ d.student.name }} ({{ d.student.roll }}){% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+  <div>
+    <a href="/" class="text-decoration-none small text-muted mb-2 d-inline-block">
+      <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+    </a>
+    <h2 class="h3 fw-bold mb-0">Student Academic Report Card</h2>
+  </div>
+  <div>
+    <a href="/report/{{ d.student.id }}.pdf" class="btn btn-primary d-inline-flex align-items-center gap-2">
+      <i class="bi bi-file-earmark-pdf-fill"></i>
+      <span>Download PDF Report</span>
+    </a>
+  </div>
+</div>
+
+<!-- Student Info Card -->
+<div class="card p-4 mb-4">
+  <div class="row align-items-center">
+    <div class="col-md-8">
+      <div class="d-flex align-items-center gap-3">
+        <div class="p-3 bg-primary-subtle text-primary rounded-circle fs-3">
+          <i class="bi bi-person-badge-fill"></i>
+        </div>
+        <div>
+          <h4 class="fw-bold mb-1">{{ d.student.name }}</h4>
+          <div class="text-muted small">
+            Roll Number: <code class="fw-bold text-dark">{{ d.student.roll }}</code> &bull;
+            Class: <span class="badge bg-light text-dark border">{{ d.student.class_name }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4 text-md-end mt-3 mt-md-0">
+      <div class="small text-muted text-uppercase fw-semibold">Academic Standing</div>
+      {% if d.at_risk %}
+      <span class="badge bg-danger fs-6 px-3 py-2 mt-1">
+        <i class="bi bi-exclamation-triangle-fill me-1"></i> Needs Support
+      </span>
+      {% else %}
+      <span class="badge bg-success fs-6 px-3 py-2 mt-1">
+        <i class="bi bi-check-circle-fill me-1"></i> Good Standing
+      </span>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Support Warning if At-Risk -->
+{% if d.at_risk %}
+<div class="alert alert-danger d-flex align-items-start gap-3 p-3 mb-4 rounded-3 border-danger-subtle">
+  <i class="bi bi-exclamation-octagon-fill fs-3 text-danger mt-1"></i>
+  <div>
+    <h5 class="fw-bold text-danger mb-1">Academic Intervention Notice</h5>
+    <p class="small mb-2">This student has triggered automated support alerts based on performance criteria:</p>
+    <ul class="mb-0 small ps-3">
+      {% for r in d.reasons %}
+      <li class="fw-semibold">{{ r }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<!-- Subject Breakdown Table -->
+<div class="card overflow-hidden mb-4">
+  <div class="card-header bg-white py-3">
+    <h5 class="card-title mb-0 fw-bold">Subject Performance Breakdown</h5>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr>
+          <th>Subject</th>
+          <th>Score Average</th>
+          <th>Grade</th>
+          <th>Performance Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for n, v in d.subjects.items() %}
+        <tr class="{% if v < 40 %}table-danger{% endif %}">
+          <td class="fw-medium text-dark">{{ n }}</td>
+          <td>
+            <div class="d-flex align-items-center gap-2">
+              <div class="progress flex-grow-1" style="height: 8px; max-width: 120px;">
+                <div class="progress-bar {% if v < 40 %}bg-danger{% elif v >= 80 %}bg-success{% else %}bg-primary{% endif %}"
+                     role="progressbar" style="width: {{ v }}%"></div>
+              </div>
+              <span class="fw-semibold">{{ "%.1f"|format(v) }}%</span>
+            </div>
+          </td>
+          <td>
+            <span class="badge {% if grade(v) in ('A+', 'A') %}bg-success{% elif grade(v) == 'B' %}bg-primary{% elif grade(v) == 'C' %}bg-info text-dark{% elif grade(v) == 'D' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+              {{ grade(v) }}
+            </span>
+          </td>
+          <td>
+            {% if v < 40 %}
+            <span class="text-danger small fw-semibold">
+              <i class="bi bi-arrow-down-circle-fill me-1"></i> Below 40% Threshold
+            </span>
+            {% else %}
+            <span class="text-success small fw-semibold">
+              <i class="bi bi-check-circle me-1"></i> Satisfactory
+            </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" class="text-center py-4 text-muted">No marks recorded yet for this student.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot class="table-group-divider bg-light">
+        <tr class="fw-bold">
+          <td>Overall Average</td>
+          <td>{{ "%.1f"|format(d.overall) }}%</td>
+          <td>
+            <span class="badge bg-dark">{{ d.grade }}</span>
+          </td>
+          <td>
+            {% if d.overall < 50 %}
+            <span class="text-danger small">Overall below 50% threshold</span>
+            {% else %}
+            <span class="text-success small">Passing Overall</span>
+            {% endif %}
+          </td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+</div>
+{% endblock %}

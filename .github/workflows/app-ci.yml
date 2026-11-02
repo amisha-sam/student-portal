@@ -1,0 +1,163 @@
+name: Application CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main", "feature/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint & Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 pytest pytest-cov
+          pip install -r app/requirements.txt
+
+      - name: Lint with Flake8
+        run: |
+          # Stop build if there are Python syntax errors or undefined names
+          flake8 app --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all other warnings as non-fatal
+          flake8 app --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+
+      - name: Run Pytest Suite with Coverage
+        run: |
+          cd app
+          pytest --cov=. --cov-report=term-missing tests/
+
+  container-security-and-build:
+    name: Container Build & Security Scan
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile with Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/Dockerfile
+          failure-threshold: warning
+          ignore: DL3008,DL3013
+
+      - name: Set up QEMU for ARM64 Architecture
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: linux/arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Local Image for Security Scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/arm64
+          load: true
+          tags: student-portal-app:scan
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: student-portal-app:scan
+          format: "table"
+          exit-code: "0" # Audit report in CI log
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Configure AWS Credentials
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Log in to Amazon ECR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push Production Image to ECR
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.ECR_REPOSITORY_URL }}:${{ github.sha }}
+            ${{ secrets.ECR_REPOSITORY_URL }}:latest
+
+  cd-deploy:
+    name: Continuous Deployment via AWS SSM
+    needs: container-security-and-build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy Update to EC2 App Host via AWS SSM
+        run: |
+          echo "Finding active EC2 host in Auto Scaling Group..."
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=student-portal" "Name=instance-state-name,Values=running" \
+            --region "${{ secrets.AWS_REGION }}" \
+            --query "sort_by(Reservations[].Instances[], &LaunchTime)[-1].InstanceId" --output text)
+
+          echo "Target Instance: ${INSTANCE_ID}"
+
+          echo "Triggering zero-SSH image pull and container restart via SSM..."
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${INSTANCE_ID}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "commands=[
+              \"aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPOSITORY_URL }}\",
+              \"docker pull ${{ secrets.ECR_REPOSITORY_URL }}:latest\",
+              \"docker rm -f student-portal-app\",
+              \"docker run -d --name student-portal-app --restart unless-stopped --network student-portal-net -p 8000:8000 --env-file /opt/student-portal/app.env ${{ secrets.ECR_REPOSITORY_URL }}:latest\",
+              \"curl -s -f http://localhost:8000/health\"
+            ]" \
+            --region "${{ secrets.AWS_REGION }}" \
+            --query "Command.CommandId" --output text)
+
+          echo "SSM Command ${COMMAND_ID} dispatched. Waiting for completion..."
+          aws ssm wait command-executed \
+            --command-id "${COMMAND_ID}" \
+            --instance-id "${INSTANCE_ID}" \
+            --region "${{ secrets.AWS_REGION }}"
+
+          echo "Deployment command completed successfully."
+
+      - name: End-to-End ALB Health Verification
+        run: |
+          echo "Verifying live ALB endpoint health: http://${{ secrets.ALB_DNS_NAME }}/health"
+          curl --fail --retry 5 --retry-delay 5 "http://${{ secrets.ALB_DNS_NAME }}/health"
+          echo "ALB Health Check PASSED!"

@@ -1,0 +1,55 @@
+---
+- name: Ensure Prometheus config directory exists
+  file:
+    path: /opt/student-portal/monitoring/prometheus
+    state: directory
+    owner: ec2-user
+    group: ec2-user
+    mode: '0755'
+
+- name: Deploy Prometheus scrape configuration
+  template:
+    src: prometheus.yml.j2
+    dest: /opt/student-portal/monitoring/prometheus/prometheus.yml
+    owner: ec2-user
+    group: ec2-user
+    mode: '0644'
+  register: prometheus_config
+
+- name: Deploy Prometheus alert rules
+  copy:
+    src: alert_rules.yml
+    dest: /opt/student-portal/monitoring/prometheus/alert_rules.yml
+    owner: ec2-user
+    group: ec2-user
+    mode: '0644'
+  register: prometheus_rules
+
+- name: Pull Prometheus Docker image
+  command: docker pull prom/prometheus:v2.54.1
+  register: pull_prometheus
+  changed_when: "'Downloaded newer image' in pull_prometheus.stdout"
+
+- name: Check if Prometheus container is running
+  command: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' prometheus
+  register: prometheus_running
+  failed_when: false
+  changed_when: false
+
+- name: Restart Prometheus container if configuration changed
+  command: docker rm -f prometheus
+  when: (prometheus_config.changed or prometheus_rules.changed or pull_prometheus.changed) and prometheus_running.stdout == 'true'
+
+- name: Run Prometheus container
+  command: >
+    docker run -d
+    --name prometheus
+    --restart unless-stopped
+    --network student-portal-net
+    -p 9090:9090
+    -v /opt/student-portal/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    -v /opt/student-portal/monitoring/prometheus/alert_rules.yml:/etc/prometheus/alert_rules.yml:ro
+    prom/prometheus:v2.54.1
+    --config.file=/etc/prometheus/prometheus.yml
+    --storage.tsdb.retention.time=7d
+  when: prometheus_running.stdout != 'true' or prometheus_config.changed or prometheus_rules.changed or pull_prometheus.changed

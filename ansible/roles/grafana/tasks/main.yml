@@ -1,0 +1,71 @@
+---
+- name: Ensure Grafana provisioning directories exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: ec2-user
+    group: ec2-user
+    mode: '0755'
+  loop:
+    - /opt/student-portal/monitoring/grafana/provisioning/datasources
+    - /opt/student-portal/monitoring/grafana/provisioning/dashboards
+    - /opt/student-portal/monitoring/grafana/dashboards/definitions
+
+- name: Deploy Grafana datasources provisioning
+  copy:
+    src: datasources.yml
+    dest: /opt/student-portal/monitoring/grafana/provisioning/datasources/datasources.yml
+    owner: ec2-user
+    group: ec2-user
+    mode: '0644'
+  register: grafana_datasources
+
+- name: Deploy Grafana dashboards provisioning
+  copy:
+    src: dashboards.yml
+    dest: /opt/student-portal/monitoring/grafana/provisioning/dashboards/dashboards.yml
+    owner: ec2-user
+    group: ec2-user
+    mode: '0644'
+  register: grafana_dashboards_provider
+
+- name: Deploy dashboard definition JSON files
+  copy:
+    src: definitions/
+    dest: /opt/student-portal/monitoring/grafana/dashboards/definitions/
+    owner: ec2-user
+    group: ec2-user
+    mode: '0644'
+  register: grafana_definitions
+
+- name: Pull Grafana OSS Docker image
+  command: docker pull grafana/grafana-oss:11.1.0
+  register: pull_grafana
+  changed_when: "'Downloaded newer image' in pull_grafana.stdout"
+
+- name: Check if Grafana container is running
+  command: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' grafana
+  register: grafana_running
+  failed_when: false
+  changed_when: false
+
+- name: Remove stale or stopped Grafana container
+  command: docker rm -f grafana
+  when: grafana_running.stdout != 'true' or grafana_datasources.changed or grafana_dashboards_provider.changed or grafana_definitions.changed or pull_grafana.changed
+  failed_when: false
+
+- name: Run Grafana container
+  command: >
+    docker run -d
+    --name grafana
+    --restart unless-stopped
+    --network student-portal-net
+    -p 3000:3000
+    -e "GF_SECURITY_ADMIN_PASSWORD=admin"
+    -e "GF_USERS_ALLOW_SIGN_UP=false"
+    -e "GF_ANALYTICS_REPORTING_ENABLED=false"
+    -v /opt/student-portal/monitoring/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    -v /opt/student-portal/monitoring/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    -v /opt/student-portal/monitoring/grafana/dashboards/definitions:/var/lib/grafana/dashboards:ro
+    grafana/grafana-oss:11.1.0
+  when: grafana_running.stdout != 'true' or grafana_datasources.changed or grafana_dashboards_provider.changed or grafana_definitions.changed or pull_grafana.changed
