@@ -1,0 +1,32 @@
+---
+- name: Pull Prometheus Node Exporter Docker image
+  command: docker pull prom/node-exporter:v1.8.2
+  register: pull_node_exporter
+  changed_when: "'Downloaded newer image' in pull_node_exporter.stdout"
+
+- name: Inspect if node_exporter container is already running
+  command: docker inspect -f '{{ "{{" }}.State.Running{{ "}}" }}' node-exporter
+  register: node_exporter_running
+  failed_when: false
+  changed_when: false
+
+- name: Stop and remove existing node_exporter container if image updated
+  command: docker rm -f node-exporter
+  when: pull_node_exporter.changed and node_exporter_running.stdout == 'true'
+
+- name: Run Node Exporter container
+  command: >
+    docker run -d
+    --name node-exporter
+    --restart unless-stopped
+    --network student-portal-net
+    -p 9100:9100
+    -v "/proc:/host/proc:ro"
+    -v "/sys:/host/sys:ro"
+    -v "/:/rootfs:ro"
+    prom/node-exporter:v1.8.2
+    --path.procfs=/host/proc
+    --path.rootfs=/rootfs
+    --path.sysfs=/host/sys
+    --collector.filesystem.mount-points-exclude="^/(sys|proc|dev|host|etc)($|/)"
+  when: node_exporter_running.stdout != 'true' or pull_node_exporter.changed

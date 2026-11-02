@@ -1,0 +1,23 @@
+---
+- name: Ensure Docker package is installed
+  dnf:
+    name: docker
+    state: present
+
+- name: Ensure Docker service is running and enabled
+  service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Add ec2-user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: true
+
+- name: Create dedicated bridge network for containers
+  command: docker network create student-portal-net
+  register: docker_net
+  failed_when: docker_net.rc != 0 and 'already exists' not in docker_net.stderr
+  changed_when: docker_net.rc == 0

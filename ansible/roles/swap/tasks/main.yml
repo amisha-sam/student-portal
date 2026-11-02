@@ -1,0 +1,36 @@
+---
+# Idempotent Swap Configuration for 1GB/2GB EC2 instances
+- name: Check if swapfile exists
+  stat:
+    path: /swapfile
+  register: swapfile_stat
+
+- name: Create swapfile if not present (2GB)
+  command: dd if=/dev/zero of=/swapfile bs=1M count=2048
+  when: not swapfile_stat.stat.exists
+
+- name: Set secure permissions on swapfile
+  file:
+    path: /swapfile
+    owner: root
+    group: root
+    mode: '0600'
+
+- name: Format swapfile as swap space
+  command: mkswap /swapfile
+  when: not swapfile_stat.stat.exists
+
+- name: Check active swap status
+  command: swapon --show
+  register: swapon_output
+  changed_when: false
+
+- name: Enable swapfile
+  command: swapon /swapfile
+  when: "'/swapfile' not in swapon_output.stdout"
+
+- name: Add swapfile entry to /etc/fstab for boot persistence
+  lineinfile:
+    path: /etc/fstab
+    line: '/swapfile none swap sw 0 0'
+    state: present

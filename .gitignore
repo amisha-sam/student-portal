@@ -10,3 +10,4 @@ venv/
 *.tfstate*
 *.tfvars
 !example.tfvars
+*.binary
